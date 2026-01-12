@@ -1,0 +1,144 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlinx-serialization'
+apply plugin: 'org.jmailen.kotlinter'
+
+assert !ext.has("pkgNameSuffix")
+assert !ext.has("libVersion")
+
+assert extName.chars().max().asInt < 0x180 : "Extension name should be romanized"
+
+Project theme = ext.has("themePkg") ? project(":lib-multisrc:$themePkg") : null
+if (theme != null) evaluationDependsOn(theme.path)
+
+android {
+    compileSdkVersion AndroidConfig.compileSdk
+    namespace AndroidConfig.namespace
+
+    sourceSets {
+        main {
+            manifest.srcFile "AndroidManifest.xml"
+            java.srcDirs = ['src']
+            res.srcDirs = ['res']
+        }
+        release {
+            manifest.srcFile "AndroidManifest.xml"
+        }
+        debug {
+            manifest.srcFile "AndroidManifest.xml"
+        }
+    }
+
+    defaultConfig {
+        minSdkVersion AndroidConfig.minSdk
+        targetSdkVersion AndroidConfig.targetSdk
+        applicationIdSuffix project.parent.name + "." + project.name
+        versionCode theme == null ? extVersionCode : theme.baseVersionCode + overrideVersionCode
+        versionName "14."
+        base {
+            archivesName = "aniyomi--v"
+        }
+        assert extClass.startsWith(".")
+        manifestPlaceholders = [
+                appName : "Aniyomi: ",
+                extClass: extClass,
+                nsfw    : project.ext.find("isNsfw") ? 1 : 0,
+        ]
+        String baseUrl = project.ext.find("baseUrl") ?: ""
+        if (theme != null && !baseUrl.isEmpty()) {
+            def split = baseUrl.split("://")
+            assert split.length == 2
+            def path = split[1].split("/")
+            manifestPlaceholders += [
+                    SOURCEHOST  : path[0],
+                    SOURCESCHEME: split[0],
+            ]
+        }
+
+    }
+
+    signingConfigs {
+        release {
+            storeFile rootProject.file("signingkey.jks")
+            storePassword System.getenv("KEY_STORE_PASSWORD")
+            keyAlias System.getenv("ALIAS")
+            keyPassword System.getenv("KEY_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+
+    dependenciesInfo {
+        includeInApk = false
+    }
+
+    buildFeatures {
+        // Disable unused AGP features
+        aidl false
+        renderScript false
+        resValues false
+        shaders false
+        buildConfig true
+    }
+
+    kotlinOptions {
+        freeCompilerArgs += "-opt-in=kotlinx.serialization.ExperimentalSerializationApi"
+    }
+}
+
+dependencies {
+    if (theme != null) implementation(theme) // Overrides core launcher icons
+    implementation(project(":core"))
+    compileOnly(libs.bundles.common)
+
+    // Extractors and interceptors used by extensions
+    implementation(project(":lib:cloudflare-interceptor"))
+
+    implementation(project(":lib:dood-extractor"))
+    implementation(project(":lib:upstream-extractor"))
+    implementation(project(":lib:vudeo-extractor"))
+    implementation(project(":lib:uqload-extractor"))
+    implementation(project(":lib:streamhidevid-extractor"))
+    implementation(project(":lib:streamvid-extractor"))
+    implementation(project(":lib:vido-extractor"))
+    implementation(project(":lib:okru-extractor"))
+    implementation(project(":lib:streamhub-extractor"))
+    implementation(project(":lib:voe-extractor"))
+    implementation(project(":lib:vidmoly-extractor"))
+    implementation(project(":lib:sendvid-extractor"))
+    implementation(project(":lib:sibnet-extractor"))
+    implementation(project(":lib:vk-extractor"))
+}
+
+configurations.all {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+        if (details.requested.group == 'org.jetbrains.kotlin' && details.requested.name == 'kotlin-stdlib-jdk8' && details.requested.version == '1.7.0') {
+            details.useVersion(libs.versions.kotlin.version.get())
+            details.because 'Fix problems with dev.datlag JsUnpacker'
+        }
+    }
+}
+
+abstract class WriteManifestFileTask extends DefaultTask {
+    @OutputFile
+    abstract RegularFileProperty getManifestFile()
+
+    @TaskAction
+    void generate() {
+        getManifestFile().get().asFile.text = '<?xml version="1.0" encoding="utf-8"?>\n<manifest />\n'
+    }
+}
+
+def writeManifest = tasks.register("writeManifestFile", WriteManifestFileTask) {
+    manifestFile.set(android.sourceSets.main.manifest.srcFile)
+}
+
+preBuild.dependsOn(writeManifest, lintKotlin)
+if (System.getenv("CI") != "true") {
+    lintKotlin.dependsOn(formatKotlin)
+}
