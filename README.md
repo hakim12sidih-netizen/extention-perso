@@ -55,6 +55,7 @@ They are installed and uninstalled like regular apps in `.apk` format.
 Si tu préfères télécharger directement les fichiers APK, ils sont disponibles dans ce dépot sur la branche `repo`.dépot sur la [branche `repo`](https://codeberg.org/hollow/aniyomi-extensions-fr/src/branch/repo/apk).
 
 If you prefer to directly download the APK files, they are available directly in this repository in the
+`repo` branch.
 [`repo` branch](https://codeberg.org/hollow/aniyomi-extensions-fr/src/branch/repo/apk).
 
 ## Demandes - Issues
